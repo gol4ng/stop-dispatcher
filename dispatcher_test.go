@@ -3,6 +3,7 @@ package stop_dispatcher_test
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -78,10 +79,13 @@ func Test_Dispatcher_WithEmitter(t *testing.T) {
 }
 
 func Test_Dispatcher_UnregisterCallback(t *testing.T) {
+	safeInnerStopFn := sync.Mutex{}
 	var innerStopFn func(stop_dispatcher.Reason)
 	d := stop_dispatcher.NewDispatcher(
 		stop_dispatcher.WithEmitter(func(stopFn func(stop_dispatcher.Reason)) {
+			safeInnerStopFn.Lock()
 			innerStopFn = stopFn
+			safeInnerStopFn.Unlock()
 		}),
 	)
 	callbackCalled := false
@@ -91,7 +95,9 @@ func Test_Dispatcher_UnregisterCallback(t *testing.T) {
 	})
 	go func(){
 		time.AfterFunc(10*time.Millisecond, func() {
+			safeInnerStopFn.Lock()
 			innerStopFn("fake_reason")
+			safeInnerStopFn.Unlock()
 		})
 	}()
 	err := d.Wait(context.TODO())
@@ -102,7 +108,9 @@ func Test_Dispatcher_UnregisterCallback(t *testing.T) {
 	unregisterCallbackFunc()
 	go func(){
 		time.AfterFunc(10*time.Millisecond, func() {
+			safeInnerStopFn.Lock()
 			innerStopFn("fake_reason")
+			safeInnerStopFn.Unlock()
 		})
 	}()
 	err1 := d.Wait(context.TODO())
