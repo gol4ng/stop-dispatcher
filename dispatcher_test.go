@@ -29,7 +29,7 @@ func Test_Dispatcher_Stop(t *testing.T) {
 func Test_Dispatcher_Error(t *testing.T) {
 	callbackCalled := false
 	d := stop_dispatcher.NewDispatcher()
-	d.RegisterCallback(
+	d.RegisterCallbacks(
 		func(ctx context.Context) error {
 			callbackCalled = true
 			return errors.New("fake_error")
@@ -62,6 +62,52 @@ func Test_Dispatcher_WithReasonHandler(t *testing.T) {
 	err := d.Wait(context.TODO())
 	assert.NoError(t, err)
 	assert.True(t, reasonHandlerCalled)
+}
+
+func Test_Dispatcher_WithEmitter(t *testing.T) {
+	d := stop_dispatcher.NewDispatcher(
+		stop_dispatcher.WithEmitter(func(stopFn func(stop_dispatcher.Reason)) {
+			time.AfterFunc(10*time.Millisecond, func() {
+				stopFn("fake_reason")
+			})
+		}),
+	)
+
+	err := d.Wait(context.TODO())
+	assert.NoError(t, err)
+}
+
+func Test_Dispatcher_UnregisterCallback(t *testing.T) {
+	var innerStopFn func(stop_dispatcher.Reason)
+	d := stop_dispatcher.NewDispatcher(
+		stop_dispatcher.WithEmitter(func(stopFn func(stop_dispatcher.Reason)) {
+			innerStopFn = stopFn
+		}),
+	)
+	callbackCalled := false
+	unregisterCallbackFunc := d.RegisterCallback(func(ctx context.Context) error {
+		callbackCalled = true
+		return nil
+	})
+	go func(){
+		time.AfterFunc(10*time.Millisecond, func() {
+			innerStopFn("fake_reason")
+		})
+	}()
+	err := d.Wait(context.TODO())
+	assert.NoError(t, err)
+	assert.True(t, callbackCalled)
+
+	callbackCalled = false
+	unregisterCallbackFunc()
+	go func(){
+		time.AfterFunc(10*time.Millisecond, func() {
+			innerStopFn("fake_reason")
+		})
+	}()
+	err1 := d.Wait(context.TODO())
+	assert.NoError(t, err1)
+	assert.False(t, callbackCalled)
 }
 
 func Test_Dispatcher(t *testing.T) {
