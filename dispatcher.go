@@ -2,25 +2,54 @@ package stop_dispatcher
 
 import (
 	"context"
+	"sort"
 	"sync"
 
 	local_error "github.com/gol4ng/stop-dispatcher/error"
 )
 
 // use to replace the callback when they unregistered
-var nopFunc = func(ctx context.Context) error { return nil }
+var nopFunc = CallbackFunc(func(ctx context.Context) error { return nil })
 
 // Reason is the stopping given value
 type Reason interface{}
 
 // Emitter can emit a reason that will be dispatched
-type Emitter func(func(Reason))
+type Emitter func(ReasonHandler)
 
 // It receive the emitted stop reason before calling callbacks
 type ReasonHandler func(Reason)
 
-// Callback will be called when a reason raised from Emitter
-type Callback func(ctx context.Context) error
+// CallbackFunc will be called when a reason raised from Emitter
+type CallbackFunc func(ctx context.Context) error
+
+func (c CallbackFunc) GetPriority() int {
+	return 0
+}
+func (c CallbackFunc) Callback(ctx context.Context) error {
+	return c(ctx)
+}
+
+type Callback interface {
+	GetPriority() int
+	Callback(ctx context.Context) error
+}
+
+type PrioritizedCallback struct {
+	CallbackFunc
+	priority int
+}
+
+func (c PrioritizedCallback) GetPriority() int {
+	return c.priority
+}
+
+func NewPrioritizeCallback(priority int, callback CallbackFunc) Callback {
+	return PrioritizedCallback{
+		CallbackFunc: callback,
+		priority:     priority,
+	}
+}
 
 // Dispatcher implementation provide Reason dispatcher
 type Dispatcher struct {
@@ -42,6 +71,22 @@ func (t *Dispatcher) RegisterEmitter(stopEmitters ...Emitter) {
 	for _, stopEmitter := range stopEmitters {
 		go stopEmitter(t.Stop)
 	}
+}
+
+func (t *Dispatcher) RegisterPrioritizeCallbackFunc(priority int, stopCallback CallbackFunc) func() {
+	return t.RegisterCallback(NewPrioritizeCallback(priority, stopCallback))
+}
+
+func (t *Dispatcher) RegisterCallbackFunc(stopCallback CallbackFunc) func() {
+	return t.RegisterCallback(stopCallback)
+}
+
+func (t *Dispatcher) RegisterCallbacksFunc(stopCallbacks ...CallbackFunc) {
+	callbacks := make([]Callback, len(stopCallbacks))
+	for i, c := range stopCallbacks {
+		callbacks[i] = c
+	}
+	t.RegisterCallbacks(callbacks...)
 }
 
 // RegisterCallback is used to register stopping callback
@@ -77,9 +122,12 @@ func (t *Dispatcher) Wait(ctx context.Context) error {
 	errs := local_error.List{}
 	t.mu.RLock()
 	stopCallbacks := t.stopCallbacks
-	defer t.mu.RUnlock()
+	t.mu.RUnlock()
+	sort.Slice(stopCallbacks, func(i, j int) bool {
+		return stopCallbacks[i].GetPriority() > stopCallbacks[j].GetPriority()
+	})
 	for _, fn := range stopCallbacks {
-		if err := fn(shutdownCtx); err != nil {
+		if err := fn.Callback(shutdownCtx); err != nil {
 			errs.Add(err)
 		}
 	}
