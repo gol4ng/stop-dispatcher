@@ -14,7 +14,7 @@ var osExit = os.Exit
 
 // Timeout will exit if the timeout exceed
 func Timeout(timeout time.Duration) stop_dispatcher.Callback {
-	return stop_dispatcher.CallbackFunc(func(ctx context.Context) error {
+	return stop_dispatcher.NewPrioritizeCallback(1000, func(ctx context.Context) error {
 		time.AfterFunc(timeout, func() {
 			log.Printf("Shutdown timeout exceeded %s", timeout)
 			osExit(1)
