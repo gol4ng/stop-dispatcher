@@ -23,27 +23,34 @@ type ReasonHandler func(Reason)
 // CallbackFunc will be called when a reason raised from Emitter
 type CallbackFunc func(ctx context.Context) error
 
+// GetPriority will return callback priority
 func (c CallbackFunc) GetPriority() int {
 	return 0
 }
+
+// Callback will execute the CallbackFunc
 func (c CallbackFunc) Callback(ctx context.Context) error {
 	return c(ctx)
 }
 
+// Callback represent a standard callback
 type Callback interface {
 	GetPriority() int
 	Callback(ctx context.Context) error
 }
 
+// PrioritizedCallback represent a callback with priority defined
 type PrioritizedCallback struct {
 	CallbackFunc
 	priority int
 }
 
+// GetPriority will return callback priority
 func (c PrioritizedCallback) GetPriority() int {
 	return c.priority
 }
 
+// NewPrioritizeCallback wrap CallbackFunc to configure custom priority
 func NewPrioritizeCallback(priority int, callback CallbackFunc) Callback {
 	return PrioritizedCallback{
 		CallbackFunc: callback,
@@ -73,14 +80,20 @@ func (t *Dispatcher) RegisterEmitter(stopEmitters ...Emitter) {
 	}
 }
 
+// RegisterPrioritizeCallbackFunc will register a CallbackFunc with the given priority
+// It return a func to unregister the callback
 func (t *Dispatcher) RegisterPrioritizeCallbackFunc(priority int, stopCallback CallbackFunc) func() {
 	return t.RegisterCallback(NewPrioritizeCallback(priority, stopCallback))
 }
 
+// RegisterCallbackFunc will register a CallbackFunc with the priority at 0
+// It return a func to unregister the callback
 func (t *Dispatcher) RegisterCallbackFunc(stopCallback CallbackFunc) func() {
 	return t.RegisterCallback(stopCallback)
 }
 
+// RegisterCallbacksFunc will register multiple CallbackFunc with the priority at 0
+// If you want to unregister callback you should use RegisterCallback
 func (t *Dispatcher) RegisterCallbacksFunc(stopCallbacks ...CallbackFunc) {
 	callbacks := make([]Callback, len(stopCallbacks))
 	for i, c := range stopCallbacks {
@@ -123,6 +136,7 @@ func (t *Dispatcher) Wait(ctx context.Context) error {
 	t.mu.RLock()
 	stopCallbacks := t.stopCallbacks
 	t.mu.RUnlock()
+	// Sort stopCallbacks highest priority first
 	sort.Slice(stopCallbacks, func(i, j int) bool {
 		return stopCallbacks[i].GetPriority() > stopCallbacks[j].GetPriority()
 	})
