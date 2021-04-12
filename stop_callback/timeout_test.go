@@ -23,7 +23,7 @@ func TestTimedout(t *testing.T) {
 	}
 
 	fn := Timeout(100 * time.Millisecond)
-	assert.Nil(t, fn(context.TODO()))
+	assert.Nil(t, fn.Callback(context.TODO()))
 	time.Sleep(200 * time.Millisecond)
 	assert.Equal(t, "Shutdown timeout exceeded 100ms\n", buf.String())
 }

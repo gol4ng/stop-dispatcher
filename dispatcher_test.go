@@ -14,7 +14,7 @@ import (
 func Test_Dispatcher_Stop(t *testing.T) {
 	callbackCalled := false
 	d := stop_dispatcher.NewDispatcher()
-	d.RegisterCallback(func(ctx context.Context) error {
+	d.RegisterCallbackFunc(func(ctx context.Context) error {
 		callbackCalled = true
 		return nil
 	})
@@ -28,14 +28,19 @@ func Test_Dispatcher_Stop(t *testing.T) {
 }
 
 func Test_Dispatcher_Error(t *testing.T) {
-	callbackCalled := false
+	var step []string
 	d := stop_dispatcher.NewDispatcher()
-	d.RegisterCallbacks(
+	d.RegisterPrioritizeCallbackFunc(1, func(ctx context.Context) error {
+		step = append(step, "priority:1_index:0")
+		return errors.New("fake_error_priority_1")
+	})
+	d.RegisterCallbacksFunc(
 		func(ctx context.Context) error {
-			callbackCalled = true
+			step = append(step, "priority:0_index:0")
 			return errors.New("fake_error")
 		},
 		func(ctx context.Context) error {
+			step = append(step, "priority:0_index:1")
 			return errors.New("fake_error2")
 		},
 	)
@@ -44,8 +49,13 @@ func Test_Dispatcher_Error(t *testing.T) {
 	})
 
 	err := d.Wait(context.TODO())
-	assert.EqualError(t, err, "fake_error\nfake_error2\n")
-	assert.True(t, callbackCalled)
+	assert.EqualError(t, err, "fake_error_priority_1\nfake_error\nfake_error2\n")
+	assert.Len(t, step, 3)
+	assert.Equal(t, []string{
+		"priority:1_index:0",
+		"priority:0_index:0",
+		"priority:0_index:1",
+	}, step)
 }
 
 func Test_Dispatcher_WithReasonHandler(t *testing.T) {
@@ -67,7 +77,7 @@ func Test_Dispatcher_WithReasonHandler(t *testing.T) {
 
 func Test_Dispatcher_WithEmitter(t *testing.T) {
 	d := stop_dispatcher.NewDispatcher(
-		stop_dispatcher.WithEmitter(func(stopFn func(stop_dispatcher.Reason)) {
+		stop_dispatcher.WithEmitter(func(stopFn stop_dispatcher.ReasonHandler) {
 			time.AfterFunc(10*time.Millisecond, func() {
 				stopFn("fake_reason")
 			})
@@ -82,18 +92,18 @@ func Test_Dispatcher_UnregisterCallback(t *testing.T) {
 	safeInnerStopFn := sync.Mutex{}
 	var innerStopFn func(stop_dispatcher.Reason)
 	d := stop_dispatcher.NewDispatcher(
-		stop_dispatcher.WithEmitter(func(stopFn func(stop_dispatcher.Reason)) {
+		stop_dispatcher.WithEmitter(func(stopFn stop_dispatcher.ReasonHandler) {
 			safeInnerStopFn.Lock()
 			innerStopFn = stopFn
 			safeInnerStopFn.Unlock()
 		}),
 	)
 	callbackCalled := false
-	unregisterCallbackFunc := d.RegisterCallback(func(ctx context.Context) error {
+	unregisterCallbackFunc := d.RegisterCallbackFunc(func(ctx context.Context) error {
 		callbackCalled = true
 		return nil
 	})
-	go func(){
+	go func() {
 		time.AfterFunc(10*time.Millisecond, func() {
 			safeInnerStopFn.Lock()
 			innerStopFn("fake_reason")
@@ -106,7 +116,7 @@ func Test_Dispatcher_UnregisterCallback(t *testing.T) {
 
 	callbackCalled = false
 	unregisterCallbackFunc()
-	go func(){
+	go func() {
 		time.AfterFunc(10*time.Millisecond, func() {
 			safeInnerStopFn.Lock()
 			innerStopFn("fake_reason")
@@ -121,11 +131,11 @@ func Test_Dispatcher_UnregisterCallback(t *testing.T) {
 func Test_Dispatcher(t *testing.T) {
 	callbackCalled := false
 	d := stop_dispatcher.NewDispatcher()
-	d.RegisterCallback(func(ctx context.Context) error {
+	d.RegisterCallbackFunc(func(ctx context.Context) error {
 		callbackCalled = true
 		return nil
 	})
-	d.RegisterEmitter(func(stopFn func(stop_dispatcher.Reason)) {
+	d.RegisterEmitter(func(stopFn stop_dispatcher.ReasonHandler) {
 		time.AfterFunc(10*time.Millisecond, func() {
 			stopFn("fake_reason")
 		})
@@ -134,4 +144,48 @@ func Test_Dispatcher(t *testing.T) {
 	err := d.Wait(context.TODO())
 	assert.NoError(t, err)
 	assert.True(t, callbackCalled)
+}
+
+func Test_Dispatcher_Prioritize(t *testing.T) {
+	var step []string
+	d := stop_dispatcher.NewDispatcher()
+	d.RegisterCallbacksFunc(
+		func(ctx context.Context) error {
+			step = append(step, "priority:0_index:0")
+			return nil
+		},
+		func(ctx context.Context) error {
+			step = append(step, "priority:0_index:1")
+			return nil
+		},
+	)
+	d.RegisterCallbacks(
+		stop_dispatcher.NewPrioritizeCallback(1, func(ctx context.Context) error {
+			step = append(step, "priority:1_index:0")
+			return nil
+		}),
+		stop_dispatcher.NewPrioritizeCallback(0, func(ctx context.Context) error {
+			step = append(step, "priority:0_index:2")
+			return nil
+		}),
+	)
+	d.RegisterPrioritizeCallbackFunc(3, func(ctx context.Context) error {
+		step = append(step, "priority:3_index:0")
+		return nil
+	})
+	d.RegisterEmitter(func(stopFn stop_dispatcher.ReasonHandler) {
+		time.AfterFunc(10*time.Millisecond, func() {
+			stopFn("fake_reason")
+		})
+	})
+	err := d.Wait(context.TODO())
+	assert.NoError(t, err)
+	assert.Len(t, step, 5)
+	assert.Equal(t, []string{
+		"priority:3_index:0",
+		"priority:1_index:0",
+		"priority:0_index:0",
+		"priority:0_index:1",
+		"priority:0_index:2",
+	}, step)
 }
