@@ -1,5 +1,7 @@
 # Stop dispatcher
 
+<img src="logo.png" alt="gol4ng/stop-dispatcher: Golang Stop-Dispatcher" title="Golang stop dispatcher" align="right" width="200px">
+
 Stop dispatcher can be used to manage Golang application gracefull shutdown. 
 It allow you to register application shutdown callback (to close some database connection, clean temp folder ...)
 You can event use it in sub process to manage when operation end up normally or when it failed.
@@ -10,7 +12,7 @@ You can event use it in sub process to manage when operation end up normally or 
 
 ### Examples
 
-A runner application (like http server)
+A job application (will perfom a task then end)
 
 ```go
 package main
@@ -40,21 +42,24 @@ func main() {
 
 	// Register a killer signal emitter
 	stopDispatcher.RegisterEmitter(
-		// Start the job 
 		func(stop func(reason stop_dispatcher.Reason)) {
+		    // Start the job 
 			for i := 0; i < 10; i++ {
 				fmt.Printf("%d time elapsed\n", i)
 			}
+			// The process is finish so it trigger application stopping 
 			stop("process finished")
 		},
 	)
 
 	// Register all your stopping callback
 	stopDispatcher.RegisterCallback(
-		func(ctx context.Context) error {
-			log.Println("Closing all database connection")
+		stop_dispatcher.CallbackFunc(func(ctx context.Context) error {
+            // Do all your cleannup action here
+			log.Println("Closing database connection")
+			log.Println("Clean temp file")
 			return nil
-		},
+		}),
 	)
 
 	// Wait will block until stopping reason was received
@@ -65,7 +70,7 @@ func main() {
 }
 ```
 
-A job application (will perfom a task then end)
+A runner application (like http server)
 
 ```go
 package main
@@ -120,13 +125,13 @@ func main() {
 
 	// Register all your stopping callback
 	stopDispatcher.RegisterCallbacks(
-		func(ctx context.Context) error {
+		stop_dispatcher.CallbackFunc(func(ctx context.Context) error {
 			return httpServer.Shutdown(ctx)
-		},
-		func(ctx context.Context) error {
+		}),
+		stop_dispatcher.CallbackFunc(func(ctx context.Context) error {
 			log.Println("Closing all database connection")
 			return nil
-		},
+		}),
 	)
 
 	// Wait will block until stopping reason was received
