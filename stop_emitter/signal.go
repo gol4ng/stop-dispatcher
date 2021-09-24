@@ -19,7 +19,7 @@ func DefaultSignalEmitter() stop_dispatcher.Emitter {
 
 // SignalEmitter will emit stop reason when signal was received
 func SignalEmitter(signals ...os.Signal) stop_dispatcher.Emitter {
-	return func(stop stop_dispatcher.ReasonHandler) {
+	return func(stop func(stop_dispatcher.Reason)) {
 		signalChan := make(chan os.Signal, 1)
 		signalNotify(signalChan, signals...)
 		stop(<-signalChan)
@@ -35,7 +35,7 @@ func DefaultKillerSignalEmitter() stop_dispatcher.Emitter {
 // KillerSignalEmitter will emit stop reason when signal was received
 // it exit if signal was received a second time
 func KillerSignalEmitter(signals ...os.Signal) stop_dispatcher.Emitter {
-	return func(stop stop_dispatcher.ReasonHandler) {
+	return func(stop func(stop_dispatcher.Reason)) {
 		signalReceived := false
 		signalChan := make(chan os.Signal, 2)
 		signalNotify(signalChan, signals...)
