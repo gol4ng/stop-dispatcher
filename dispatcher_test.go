@@ -77,7 +77,7 @@ func Test_Dispatcher_WithReasonHandler(t *testing.T) {
 
 func Test_Dispatcher_WithEmitter(t *testing.T) {
 	d := stop_dispatcher.NewDispatcher(
-		stop_dispatcher.WithEmitter(func(stopFn stop_dispatcher.ReasonHandler) {
+		stop_dispatcher.WithEmitter(func(stopFn func(stop_dispatcher.Reason)) {
 			time.AfterFunc(10*time.Millisecond, func() {
 				stopFn("fake_reason")
 			})
@@ -92,7 +92,7 @@ func Test_Dispatcher_UnregisterCallback(t *testing.T) {
 	safeInnerStopFn := sync.Mutex{}
 	var innerStopFn func(stop_dispatcher.Reason)
 	d := stop_dispatcher.NewDispatcher(
-		stop_dispatcher.WithEmitter(func(stopFn stop_dispatcher.ReasonHandler) {
+		stop_dispatcher.WithEmitter(func(stopFn func(stop_dispatcher.Reason)) {
 			safeInnerStopFn.Lock()
 			innerStopFn = stopFn
 			safeInnerStopFn.Unlock()
@@ -135,7 +135,7 @@ func Test_Dispatcher(t *testing.T) {
 		callbackCalled = true
 		return nil
 	})
-	d.RegisterEmitter(func(stopFn stop_dispatcher.ReasonHandler) {
+	d.RegisterEmitter(func(stopFn func(stop_dispatcher.Reason)) {
 		time.AfterFunc(10*time.Millisecond, func() {
 			stopFn("fake_reason")
 		})
@@ -173,7 +173,7 @@ func Test_Dispatcher_Prioritize(t *testing.T) {
 		step = append(step, "priority:3_index:0")
 		return nil
 	})
-	d.RegisterEmitter(func(stopFn stop_dispatcher.ReasonHandler) {
+	d.RegisterEmitter(func(stopFn func(stop_dispatcher.Reason)) {
 		time.AfterFunc(10*time.Millisecond, func() {
 			stopFn("fake_reason")
 		})
