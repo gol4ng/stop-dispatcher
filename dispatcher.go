@@ -15,7 +15,7 @@ var nopFunc = CallbackFunc(func(ctx context.Context) error { return nil })
 type Reason interface{}
 
 // Emitter can emit a reason that will be dispatched
-type Emitter func(ReasonHandler)
+type Emitter func(func(Reason))
 
 // It receive the emitted stop reason before calling callbacks
 type ReasonHandler func(Reason)
